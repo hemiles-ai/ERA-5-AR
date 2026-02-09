@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERA5 Climate AR Viewer</title>
+    <script src="https://cdn.jsdelivr.net/npm/aframe@1.4.2/dist/aframe-master.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        
+        /* Minimal, collapsible UI */
+        #ui-toggle {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 2000;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
+        #ui-panel {
+            position: fixed;
+            top: 0;
+            right: -320px;
+            width: 300px;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 20px;
+            transition: right 0.3s;
+            z-index: 1999;
+            overflow-y: auto;
+            backdrop-filter: blur(20px);
+        }
+        
+        #ui-panel.open {
+            right: 0;
+        }
+        
+        #ui-panel h2 {
+            margin-top: 0;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        
+        .control-group {
+            margin-bottom: 20px;
+        }
+        
+        .control-group label {
+            display: block;
+            font-size: 12px;
+            margin-bottom: 8px;
+            opacity: 0.8;
+        }
+        
+        button.layer-btn {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 8px;
+            transition: all 0.2s;
+        }
+        
+        button.layer-btn:hover, button.layer-btn.active {
+            background: rgba(59, 130, 246, 0.6);
+            border-color: rgba(59, 130, 246, 0.8);
+        }
+        
+        #status-bar {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 12px;
+            z-index: 1000;
+            font-size: 13px;
+            backdrop-filter: blur(10px);
+            text-align: center;
+        }
+        
+        .marker-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ef4444;
+            margin: 0 4px;
+            transition: background 0.3s;
+        }
+        
+        .marker-indicator.found {
+            background: #22c55e;
+        }
+        
+        #help-text {
+            font-size: 11px;
+            opacity: 0.7;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Minimal UI Toggle Button -->
+    <button id="ui-toggle" onclick="toggleUI()">☰</button>
+    
+    <!-- Collapsible Control Panel -->
+    <div id="ui-panel">
+        <h2>🌡️ ERA5 Climate AR</h2>
+        
+        <div class="control-group">
+            <label>Data Layer:</label>
+            <button class="layer-btn active" onclick="setDataLayer('temperature')">🌡️ Temperature</button>
+            <button class="layer-btn" onclick="setDataLayer('precipitation')">💧 Precipitation</button>
+            <button class="layer-btn" onclick="setDataLayer('wind')">💨 Wind Speed</button>
+            <button class="layer-btn" onclick="setDataLayer('pressure')">⚡ Pressure</button>
+        </div>
+        
+        <div class="control-group">
+            <label>Marker Status:</label>
+            <div style="font-size: 12px;">
+                <span class="marker-indicator" id="status-hiro"></span> Hiro (Main)
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label>Tips for Better Detection:</label>
+            <ul style="font-size: 11px; margin: 0; padding-left: 20px; opacity: 0.8;">
+                <li>Reduce monitor brightness to 50%</li>
+                <li>Hold phone 1-2 feet from screen</li>
+                <li>Tilt phone slightly if needed</li>
+                <li>Ensure good room lighting</li>
+                <li>Keep phone steady</li>
+            </ul>
+        </div>
+    </div>
+    
+    <!-- Minimal Status Bar -->
+    <div id="status-bar">
+        <div id="status">📷 Point camera at Hiro marker (top-left)</div>
+        <div id="help-text">Tap ☰ for controls • Reduce monitor brightness for better detection</div>
+    </div>
+
+    <a-scene
+        embedded
+        arjs="sourceType: webcam; 
+              debugUIEnabled: false; 
+              detectionMode: mono; 
+              patternRatio: 0.9;
+              trackingMethod: best;
+              sourceWidth: 1280;
+              sourceHeight: 960;
+              displayWidth: 1280;
+              displayHeight: 960;"
+        vr-mode-ui="enabled: false"
+        renderer="logarithmicDepthBuffer: true; 
+                  precision: medium; 
+                  antialias: true;
+                  colorManagement: true;"
+        loading-screen="enabled: false">
+
+        <!-- Main Hiro Marker - This is what the camera will track -->
+        <a-marker 
+            preset="hiro" 
+            id="marker-hiro"
+            smooth="true"
+            smoothCount="10"
+            smoothTolerance="0.01"
+            smoothThreshold="5">
+            
+            <!-- Climate data visualization -->
+            <a-entity id="climate-data-root" position="0 0.1 0" scale="0.8 0.8 0.8">
+                
+                <!-- Reference grid (helps with positioning) -->
+                <a-plane 
+                    position="0 0 0" 
+                    rotation="-90 0 0"
+                    width="1.5" 
+                    height="1.5"
+                    color="#2d3748"
+                    opacity="0.15">
+                </a-plane>
+                
+                <!-- Temperature Layer (Default) -->
+                <a-entity id="temp-layer" visible="true">
+                    <!-- Simplified grid - easier to see -->
+                    <!-- North (cooler) -->
+                    <a-cylinder position="-0.4 0 -0.4" radius="0.08" height="0.20" color="#3b82f6" opacity="0.8"></a-cylinder>
+                    <a-cylinder position="0 0 -0.4" radius="0.08" height="0.25" color="#22c55e" opacity="0.8"></a-cylinder>
+                    <a-cylinder position="0.4 0 -0.4" radius="0.08" height="0.22" color="#3b82f6" opacity="0.8"></a-cylinder>
+                    
+                    <!-- Middle -->
+                    <a-cylinder position="-0.4 0 0" radius="0.08" height="0.35" color="#facc15" opacity="0.8"></a-cylinder>
+                    <a-cylinder position="0 0 0" radius="0.08" height="0.40" color="#f97316" opacity="0.8"></a-cylinder>
+                    <a-cylinder position="0.4 0 0" radius="0.08" height="0.36" color="#facc15" opacity="0.8"></a-cylinder>
+                    
+                    <!-- South (warmer) -->
+                    <a-cylinder position="-0.4 0 0.4" radius="0.08" height="0.50" color="#ef4444" opacity="0.8"></a-cylinder>
+                    <a-cylinder position="0 0 0.4" radius="0.08" height="0.55" color="#dc2626" opacity="0.8"></a-cylinder>
+                    <a-cylinder position="0.4 0 0.4" radius="0.08" height="0.48" color="#ef4444" opacity="0.8"></a-cylinder>
+                </a-entity>
+                
+                <!-- Precipitation Layer -->
+                <a-entity id="precip-layer" visible="false">
+                    <a-sphere position="-0.4 0.25 -0.4" radius="0.07" color="#3b82f6" opacity="0.7"></a-sphere>
+                    <a-sphere position="0 0.30 -0.4" radius="0.09" color="#2563eb" opacity="0.7"></a-sphere>
+                    <a-sphere position="0.4 0.27 -0.4" radius="0.08" color="#3b82f6" opacity="0.7"></a-sphere>
+                    
+                    <a-sphere position="-0.4 0.38 0" radius="0.10" color="#1e40af" opacity="0.7"></a-sphere>
+                    <a-sphere position="0 0.42 0" radius="0.12" color="#1e3a8a" opacity="0.7"></a-sphere>
+                    <a-sphere position="0.4 0.40 0" radius="0.11" color="#1e40af" opacity="0.7"></a-sphere>
+                    
+                    <a-sphere position="-0.4 0.48 0.4" radius="0.13" color="#1e3a8a" opacity="0.7"></a-sphere>
+                    <a-sphere position="0 0.52 0.4" radius="0.14" color="#1e3a8a" opacity="0.7"></a-sphere>
+                    <a-sphere position="0.4 0.50 0.4" radius="0.13" color="#1e40af" opacity="0.7"></a-sphere>
+                </a-entity>
+                
+                <!-- Wind Layer -->
+                <a-entity id="wind-layer" visible="false">
+                    <a-cone position="-0.4 0.22 -0.4" radius-bottom="0.06" radius-top="0.01" height="0.30" color="#10b981" rotation="0 50 0" opacity="0.8"></a-cone>
+                    <a-cone position="0 0.25 -0.4" radius-bottom="0.07" radius-top="0.01" height="0.34" color="#059669" rotation="0 55 0" opacity="0.8"></a-cone>
+                    <a-cone position="0.4 0.23 -0.4" radius-bottom="0.06" radius-top="0.01" height="0.31" color="#10b981" rotation="0 52 0" opacity="0.8"></a-cone>
+                    
+                    <a-cone position="-0.4 0.35 0" radius-bottom="0.08" radius-top="0.01" height="0.42" color="#047857" rotation="0 70 0" opacity="0.8"></a-cone>
+                    <a-cone position="0 0.40 0" radius-bottom="0.09" radius-top="0.01" height="0.48" color="#047857" rotation="0 75 0" opacity="0.8"></a-cone>
+                    <a-cone position="0.4 0.37 0" radius-bottom="0.08" radius-top="0.01" height="0.44" color="#059669" rotation="0 72 0" opacity="0.8"></a-cone>
+                    
+                    <a-cone position="0 0.50 0.4" radius-bottom="0.10" radius-top="0.01" height="0.54" color="#047857" rotation="0 80 0" opacity="0.8"></a-cone>
+                </a-entity>
+                
+                <!-- Pressure Layer -->
+                <a-entity id="pressure-layer" visible="false">
+                    <a-torus position="-0.3 0.30 -0.3" radius="0.15" radius-tubular="0.015" color="#8b5cf6" opacity="0.8"></a-torus>
+                    <a-torus position="0.3 0.28 -0.3" radius="0.14" radius-tubular="0.015" color="#a78bfa" opacity="0.8"></a-torus>
+                    
+                    <a-torus position="-0.3 0.42 0" radius="0.18" radius-tubular="0.018" color="#7c3aed" opacity="0.8"></a-torus>
+                    <a-torus position="0.3 0.40 0" radius="0.17" radius-tubular="0.017" color="#8b5cf6" opacity="0.8"></a-torus>
+                    
+                    <a-torus position="0 0.50 0.3" radius="0.20" radius-tubular="0.020" color="#6d28d9" opacity="0.8"></a-torus>
+                </a-entity>
+                
+                <!-- Title - More visible -->
+                <a-text 
+                    id="data-label"
+                    value="TEMPERATURE"
+                    position="0 0.7 0"
+                    align="center"
+                    color="#ffffff"
+                    width="2"
+                    opacity="1"
+                    shader="flat">
+                </a-text>
+                
+                <!-- Simplified legend -->
+                <a-entity position="0.7 0.4 0" rotation="0 -20 0">
+                    <a-plane width="0.3" height="0.6" color="#000000" opacity="0.8"></a-plane>
+                    <a-text id="legend-text" value="HOT\n\n\n\nCOLD" position="0 0 0.01" align="center" color="#ffffff" width="0.6" shader="flat"></a-text>
+                </a-entity>
+            </a-entity>
+        </a-marker>
+
+        <a-entity camera></a-entity>
+    </a-scene>
+
+    <script>
+        let currentLayer = 'temperature';
+        let uiOpen = false;
+        
+        // Layer configurations
+        const layerConfig = {
+            temperature: { label: 'TEMPERATURE', legend: 'HOT\n\n\n\nCOLD' },
+            precipitation: { label: 'PRECIPITATION', legend: 'HIGH\n\n\n\nLOW' },
+            wind: { label: 'WIND SPEED', legend: 'FAST\n\n\n\nSLOW' },
+            pressure: { label: 'PRESSURE', legend: 'HIGH\n\n\n\nLOW' }
+        };
+        
+        // UI Toggle
+        window.toggleUI = function() {
+            uiOpen = !uiOpen;
+            document.getElementById('ui-panel').classList.toggle('open', uiOpen);
+        };
+        
+        // Marker detection
+        const markerHiro = document.querySelector('#marker-hiro');
+        
+        if (markerHiro) {
+            markerHiro.addEventListener('markerFound', function() {
+                document.getElementById('status-hiro').classList.add('found');
+                document.getElementById('status').innerHTML = '✅ Tracking! Climate data visible';
+                document.getElementById('help-text').innerHTML = 'Tap ☰ to change data layers';
+                console.log('Marker detected!');
+            });
+            
+            markerHiro.addEventListener('markerLost', function() {
+                document.getElementById('status-hiro').classList.remove('found');
+                document.getElementById('status').innerHTML = '📷 Point camera at Hiro marker (top-left)';
+                document.getElementById('help-text').innerHTML = 'Reduce monitor brightness • Keep phone 1-2 feet away';
+                console.log('Marker lost');
+            });
+        }
+        
+        // Switch data layers
+        window.setDataLayer = function(layer) {
+            currentLayer = layer;
+            
+            // Update buttons
+            document.querySelectorAll('.layer-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Hide all layers
+            ['temp-layer', 'precip-layer', 'wind-layer', 'pressure-layer'].forEach(id => {
+                document.getElementById(id).setAttribute('visible', false);
+            });
+            
+            // Show selected layer
+            const layerMap = {
+                'temperature': 'temp-layer',
+                'precipitation': 'precip-layer',
+                'wind': 'wind-layer',
+                'pressure': 'pressure-layer'
+            };
+            
+            document.getElementById(layerMap[layer]).setAttribute('visible', true);
+            
+            // Update label
+            const config = layerConfig[layer];
+            document.getElementById('data-label').setAttribute('value', config.label);
+            document.getElementById('legend-text').setAttribute('value', config.legend);
+            
+            console.log('Switched to:', layer);
+        };
+        
+        console.log('ERA5 AR Viewer v2 initialized');
+        console.log('IMPORTANT: Reduce monitor brightness to 50% for better marker detection');
+    </script>
+</body>
+</html>
